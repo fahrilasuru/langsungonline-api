@@ -1,7 +1,7 @@
 from google import genai
 from google.genai import types
-from ..config import settings
-from ..models.normalized import NormalizedInput
+from config import settings
+from models.normalized import NormalizedInput
 
 client = genai.Client(
     api_key=settings.gemini_key
