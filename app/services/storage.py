@@ -1,3 +1,4 @@
+from fastapi import UploadFile
 from services.supabase import supabase
 
 BUCKET = "preview-files"
