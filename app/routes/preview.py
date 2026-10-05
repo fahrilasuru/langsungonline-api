@@ -2,9 +2,9 @@ from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
-from ..services.supabase import supabase
-from ..services.storage import upload_file, download_file
-from ..services.gemini import normalize_input
+from services.supabase import supabase
+from services.storage import upload_file, download_file
+from services.gemini import normalize_input
 
 router = APIRouter()
 
