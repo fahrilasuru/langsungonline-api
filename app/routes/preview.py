@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import TypeAdapter
 
 from config import settings
@@ -20,6 +20,7 @@ _adapter = TypeAdapter(PreviewResponse)
 
 @router.post("/preview")
 async def prepare(
+    request: Request,
     background: BackgroundTasks,
     text: str = Form(""),
     files: list[UploadFile] = File(default=[]),
@@ -55,6 +56,10 @@ async def prepare(
         raise HTTPException(status_code=500, detail="Gagal upload")
 
     background.add_task(run_pipeline, preview_id)
+
+    # Formulir di landing memanggil dengan fetch dan meminta JSON; form HTML biasa tetap dialihkan (303).
+    if "application/json" in (request.headers.get("accept") or ""):
+        return JSONResponse({"id": preview_id, "status": "processing"}, status_code=201)
 
     # Halaman preview ada di frontend, bukan di API ini.
     return RedirectResponse(
