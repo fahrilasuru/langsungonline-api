@@ -1,7 +1,7 @@
-fastapi==0.141.1
-uvicorn==0.53.0
-supabase==2.31.0
-google-genai==2.25.0
-python-dotenv==1.2.3
-pydantic-settings==2.15.0
-python-multipart==0.0.32
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic>=2
+pydantic-settings
+supabase
+google-genai
