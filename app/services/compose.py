@@ -3,10 +3,10 @@ Model mengisi Draft yang datar (mudah bagi Gemini); struktur akhir dan aturan fa
 import re
 from pydantic import BaseModel, Field
 
-from ..assets import ICONS, LIBRARY, PALETTES
-from ..config import settings
-from ..models.normalized import NormalizedInput
-from ..models.preview import (
+from assets import ICONS, LIBRARY, PALETTES
+from config import settings
+from models.normalized import NormalizedInput
+from models.preview import (
     Business, Catalog, Event, Events, CopyText, Cta, GoogleData, GooglePresence, Hero, Highlight, Hours, Img, InstagramData,
     InstagramPresence, MarketplaceData, MarketplacePresence, Packages, Positioning, Post, Product, Proof, Ready,
     Service, Services, Site, Theme, Tier, WebsitePresence,

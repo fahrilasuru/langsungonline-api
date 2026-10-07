@@ -1,6 +1,6 @@
 from uuid import uuid4
 from fastapi import HTTPException, UploadFile
-from .supabase import supabase
+from services.supabase import supabase
 
 BUCKET = "preview-files"
 MAX_FILE_SIZE = 20 * 1024 * 1024

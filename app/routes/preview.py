@@ -4,12 +4,12 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Uploa
 from fastapi.responses import RedirectResponse
 from pydantic import TypeAdapter
 
-from ..config import settings
-from ..models.preview import PreviewResponse
-from ..services.compose import compose, resolve_files
-from ..services.gemini import normalize_input
-from ..services.storage import download_file, signed_url, upload_file
-from ..services.supabase import supabase
+from config import settings
+from models.preview import PreviewResponse
+from services.compose import compose, resolve_files
+from services.gemini import normalize_input
+from services.storage import download_file, signed_url, upload_file
+from services.supabase import supabase
 
 router = APIRouter()
 
