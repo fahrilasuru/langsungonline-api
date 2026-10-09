@@ -13,6 +13,9 @@ from models.preview import (
 )
 
 
+from models.preview import Faq, FaqItem, Feature, Highlights, Process, ProcessStep, Quote, Stat, Stats, Testimonials
+
+
 # ------------------------------------------------------------------ skema keluaran model
 def _l():
     return Field(default_factory=list)
@@ -40,6 +43,28 @@ class DService(BaseModel):
     name: str
     description: str
     icon: str | None = None
+
+class DFeature(BaseModel):
+    icon: str | None = None
+    title: str
+    text: str
+
+class DStat(BaseModel):
+    value: str
+    label: str
+
+class DStep(BaseModel):
+    title: str
+    text: str
+
+class DQuote(BaseModel):
+    quote: str
+    name: str
+    role: str | None = None
+
+class DFaq(BaseModel):
+    q: str
+    a: str
 
 class DEvent(BaseModel):
     name: str
@@ -107,6 +132,21 @@ class Draft(BaseModel):
     highlights: list[DHighlight] = _l()
     posts: list[DPost] = _l()
     google_photos: list[str] = _l()
+    hero_secondary: str | None = None
+    hero_badges: list[str] = _l()
+    about_image: str | None = None
+    features_title: str | None = None
+    features: list[DFeature] = _l()
+    features_suggested: bool | None = None
+    stats: list[DStat] = _l()
+    offering_nav_label: str | None = None
+    offering_intro: str | None = None
+    process_title: str | None = None
+    process_steps: list[DStep] = _l()
+    process_suggested: bool | None = None
+    testimonials: list[DQuote] = _l()
+    faq: list[DFaq] = _l()
+    faq_suggested: bool | None = None
     recommendations: list[str] = _l()
 
 
@@ -141,6 +181,18 @@ events bila kegiatan atau acara berjadwal (isi events; tanggal, jam, dan tempat 
 none bila tidak ada yang bisa ditawarkan (misalnya profil pribadi).
 <ringkasan_awal> memuat template (landing_page, company_profile, product_page, event_page): anggap itu petunjuk jenis
 halaman, bukan keharusan. product_page condong ke catalog, event_page ke events, company_profile ke services atau packages.
+
+BAGIAN SITUS TAMBAHAN (semuanya opsional; lebih baik kosong daripada mengarang)
+- hero_badges: maksimal 3 frasa pendek, HANYA memakai kata-kata dari cerita. hero_secondary: label tombol kedua yang pendek
+  ("Lihat menu", "Lihat layanan"). about_image: id aset yang cocok untuk bagian tentang.
+- features (3 sampai 6): keunggulan atau alasan memilih usaha ini. Pakai fakta dari cerita; bila terpaksa umum, features_suggested=true.
+  Dilarang menulis klaim yang tidak disebut (halal, bersertifikat, garansi, tercepat, termurah). icon dari <ikon>.
+- stats (2 sampai 4): angka atau fakta singkat yang DISEBUT pengunjung (jam buka, tahun berdiri, jumlah cabang). Jangan mengarang angka.
+- process_steps (3 sampai 5): urutan sederhana cara memesan atau bekerja sama, bersifat umum; process_suggested=true.
+- testimonials: HANYA kutipan pelanggan yang benar-benar ditulis pengunjung di cerita, kata demi kata. Biasanya kosong.
+- faq (3 sampai 6): pertanyaan umum yang dijawab dari fakta cerita atau dengan "hubungi kami lewat WhatsApp". Jangan menjanjikan
+  antar, garansi, atau layanan yang tidak disebut. faq_suggested=true.
+- offering_nav_label: satu kata untuk menu navigasi ("Menu", "Produk", "Layanan", "Paket", "Acara"). offering_intro: satu kalimat pengantar.
 
 GAYA
 Bahasa Indonesia sehari-hari, hangat, jelas, kalimat pendek. Tanpa istilah teknis (SEO, optimasi, konversi, AI).
@@ -246,13 +298,35 @@ def assemble(d: Draft, job_id: str, text: str, idx: dict[str, Img]) -> dict:
 
     p = PALETTES.get(d.palette or "", PALETTES["hangat"])
     cta_label = d.cta_label or "Tanya via WhatsApp"
+    # --- bagian situs tambahan: semuanya opsional dan dijaga fakta ---
+    if offering:
+        offering.nav_label = re.sub(r"[^A-Za-z0-9 ]", "", d.offering_nav_label or "").strip()[:14] or None
+        offering.intro = (d.offering_intro or "").strip()[:240] or None
+    icon = lambda i: i if i in ICONS else "star"
+    highlights = Highlights(
+        title=d.features_title or "Kenapa memilih kami", suggested=d.features_suggested is not False,
+        items=[Feature(icon=icon(f.icon), title=f.title, text=f.text) for f in d.features[:6]]) if len(d.features) >= 3 else None
+    stat_items = [Stat(value=v, label=x.label) for x in d.stats[:4] if (v := _in_text(x.value, text)) and x.label]
+    stats = Stats(items=stat_items) if len(stat_items) >= 2 else None
+    process = Process(
+        title=d.process_title or "Cara kerjanya", suggested=d.process_suggested is not False,
+        steps=[ProcessStep(title=x.title, text=x.text) for x in d.process_steps[:5]]) if len(d.process_steps) >= 3 else None
+    quotes = [Quote(quote=q.quote, name=q.name, role=_in_text(q.role, text)) for q in d.testimonials[:4]
+              if len(q.quote.split()) >= 4 and _in_text(q.quote, text) and _in_text(q.name, text)]
+    testimonials = Testimonials(title="Kata pelanggan", items=quotes) if quotes else None
+    faq = Faq(title="Pertanyaan umum", suggested=d.faq_suggested is not False,
+              items=[FaqItem(q=x.q, a=x.a) for x in d.faq[:6]]) if len(d.faq) >= 3 else None
+    badges = [b_ for b_ in (_in_text(x, text) for x in d.hero_badges[:3]) if b_]
+
     site = Site(
-        slug=_slug(name), theme=Theme(primary=p[0], background=p[1], ink=p[2]),
+        slug=_slug(name), theme=Theme(primary=p[0], background=p[1], ink=p[2], accent=p[3], font=p[4]),
         hero=Hero(headline=d.hero_headline or name, subheadline=d.hero_subheadline or "", cta_label=d.hero_cta or cta_label,
+                  secondary_label=(d.hero_secondary or "").strip()[:24] or None, badges=badges,
                   image=img(d.hero_image) or (imgs(d.google_photos) or imgs(d.proof_photos) or [None])[0]),
         positioning=Positioning(title=d.about_title or "Tentang kami", body=d.about_body or "", points=d.about_points[:3],
-                                suggested=bool(d.about_suggested)),
-        offering=offering, proof=proof,
+                                suggested=bool(d.about_suggested), image=img(d.about_image)),
+        highlights=highlights, stats=stats, offering=offering, process=process, proof=proof,
+        testimonials=testimonials, faq=faq,
         cta=Cta(headline=d.cta_headline or "Ingin tahu lebih lanjut?", body=d.cta_body or "Tanyakan lewat WhatsApp.", label=cta_label),
     )
 
@@ -304,7 +378,7 @@ async def compose(job_id: str, text: str, normalized: NormalizedInput, images: l
         idx[im["id"]] = Img(url=f"file:{im['file_id']}", alt="Foto dari pengunjung")  # diubah jadi URL bertanda tangan saat dibaca
 
     aset = [f"{k} | {v['cat']} | {v['alt']}" for k, v in LIBRARY.items()] + [f"{im['id']} | foto pengunjung | unggahan" for im in images]
-    palet = [f"{k} | {v[3]}" for k, v in PALETTES.items()]
+    palet = [f"{k} | {v[5]}" for k, v in PALETTES.items()]
     clean = text.replace("<", "(").replace(">", ")")
     prompt = (f"<cerita>{clean}</cerita>\n<ringkasan_awal>{normalized.model_dump_json(exclude_none=True)}</ringkasan_awal>\n"
               f"<aset>\n" + "\n".join(aset) + "\n</aset>\n<palet>\n" + "\n".join(palet) + "\n</palet>\n"

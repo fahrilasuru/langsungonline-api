@@ -21,14 +21,22 @@ LIBRARY: dict[str, dict] = {
 }
 
 # id -> (primary, background, ink, deskripsi untuk model)
-PALETTES: dict[str, tuple[str, str, str, str]] = {
-    "hangat": ("#B4552D", "#FFF9F0", "#33221A", "hangat, kopi, kuliner, kerajinan"),
-    "segar": ("#2F7D5B", "#F6FBF7", "#1D2B24", "segar, alam, kesehatan, tanaman"),
-    "tenang": ("#2F5D8A", "#F7FAFC", "#1D2B3A", "profesional, jasa, pendidikan"),
-    "elegan": ("#6B3E5E", "#FBF7FA", "#2A1A25", "kecantikan, fashion, butik"),
-    "cerah": ("#D9822B", "#FFFBF2", "#3A2A12", "ceria, komunitas, acara, anak"),
+PALETTES: dict[str, tuple[str, str, str, str, str, str]] = {
+    # id -> (primary, background, ink, accent, font, deskripsi untuk model)
+    "hangat": ("#B4552D", "#FFF9F0", "#33221A", "#E8A24C", "serif", "hangat, kopi, kuliner, kerajinan"),
+    "segar": ("#2F7D5B", "#F6FBF7", "#1D2B24", "#A3D977", "sans", "segar, alam, kesehatan, tanaman"),
+    "tenang": ("#2F5D8A", "#F7FAFC", "#1D2B3A", "#5BB5E0", "sans", "profesional, jasa, pendidikan"),
+    "elegan": ("#6B3E5E", "#FBF7FA", "#2A1A25", "#D9A0C2", "serif", "kecantikan, fashion, butik"),
+    "cerah": ("#D9822B", "#FFFBF2", "#3A2A12", "#F4C95D", "sans", "ceria, komunitas, acara, anak"),
 }
 
 # Ikon Font Awesome yang boleh dipilih model (dipakai sebagai nama kelas di frontend).
-ICONS = {"mug-hot", "utensils", "location-dot", "comment", "tag", "layer-group", "camera", "images", "star", "heart",
-         "calendar-days", "bag-shopping", "scissors", "palette", "handshake", "circle-info", "phone", "clock", "gift", "truck"}
+ICONS = {
+    "mug-hot", "mug-saucer", "utensils", "bread-slice", "cake-candles", "location-dot", "comment", "comment-dots", "tag",
+    "layer-group", "camera", "camera-retro", "images", "star", "heart", "calendar-days", "bag-shopping", "basket-shopping",
+    "box", "store", "scissors", "palette", "pen-ruler", "handshake", "circle-info", "circle-check", "phone", "headset",
+    "envelope", "clock", "gift", "truck", "truck-fast", "leaf", "seedling", "shield-heart", "award", "users", "bolt",
+    "lightbulb", "wand-magic-sparkles", "hand-holding-heart", "sun", "book-open", "graduation-cap", "dumbbell", "paw",
+    "house", "car", "wrench", "laptop-code", "bullhorn", "chart-line", "globe", "gem", "spa", "music", "rocket", "fire",
+    "credit-card", "wallet", "stethoscope",
+}

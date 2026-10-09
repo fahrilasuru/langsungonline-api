@@ -38,6 +38,8 @@ class Catalog(BaseModel):
     title: str
     product_ids: list[str]
     suggested: bool = False
+    nav_label: str | None = None
+    intro: str | None = None
 
 class Tier(BaseModel):
     name: str
@@ -50,6 +52,8 @@ class Packages(BaseModel):
     title: str
     tiers: list[Tier] = Field(max_length=4)
     suggested: bool = False
+    nav_label: str | None = None
+    intro: str | None = None
 
 class Service(BaseModel):
     name: str
@@ -61,6 +65,8 @@ class Services(BaseModel):
     title: str
     items: list[Service] = Field(max_length=8)
     suggested: bool = False
+    nav_label: str | None = None
+    intro: str | None = None
 
 class Event(BaseModel):
     name: str
@@ -74,6 +80,8 @@ class Events(BaseModel):
     title: str
     items: list[Event] = Field(max_length=4)
     suggested: bool = False
+    nav_label: str | None = None
+    intro: str | None = None
 
 Offering = Annotated[Union[Catalog, Packages, Services, Events], Field(discriminator="kind")]
 
@@ -82,17 +90,22 @@ class Theme(BaseModel):
     primary: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
     background: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
     ink: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    accent: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    font: Literal["sans", "serif"] = "sans"
 
 class Hero(BaseModel):
     headline: str
     subheadline: str
     cta_label: str
+    secondary_label: str | None = None
+    badges: list[str] = Field(default_factory=list, max_length=3)
     image: Img | None = None
 
 class Positioning(BaseModel):
     title: str
     body: str
     points: list[str] = Field(default_factory=list, max_length=3)
+    image: Img | None = None
     suggested: bool = False
 
 class Proof(BaseModel):
@@ -106,13 +119,62 @@ class Cta(BaseModel):
     body: str
     label: str
 
+class Feature(BaseModel):
+    icon: str = "star"
+    title: str
+    text: str
+
+class Highlights(BaseModel):
+    title: str
+    items: list[Feature] = Field(min_length=3, max_length=6)
+    suggested: bool = False
+
+class Stat(BaseModel):
+    value: str
+    label: str
+
+class Stats(BaseModel):
+    items: list[Stat] = Field(min_length=2, max_length=4)
+
+class ProcessStep(BaseModel):
+    title: str
+    text: str
+
+class Process(BaseModel):
+    title: str
+    steps: list[ProcessStep] = Field(min_length=3, max_length=5)
+    suggested: bool = False
+
+class Quote(BaseModel):
+    quote: str
+    name: str
+    role: str | None = None
+
+class Testimonials(BaseModel):
+    title: str
+    items: list[Quote] = Field(min_length=1, max_length=4)
+
+class FaqItem(BaseModel):
+    q: str
+    a: str
+
+class Faq(BaseModel):
+    title: str
+    items: list[FaqItem] = Field(min_length=3, max_length=6)
+    suggested: bool = False
+
 class Site(BaseModel):
     slug: str = Field(pattern=r"^[a-z0-9-]+$")
     theme: Theme
     hero: Hero
     positioning: Positioning
+    highlights: Highlights | None = None
+    stats: Stats | None = None
     offering: Offering | None = None
+    process: Process | None = None
     proof: Proof | None = None
+    testimonials: Testimonials | None = None
+    faq: Faq | None = None
     cta: Cta
 
 # ---- kanal ----
