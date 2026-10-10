@@ -18,6 +18,19 @@ LIBRARY: dict[str, dict] = {
     "komunitas_ngobrol": {"cat": "komunitas", "alt": "Teman-teman mengobrol bersama", "url": _u("photo-1511632765486-a01980e01a18")},
     "acara_ruang": {"cat": "acara", "alt": "Peserta acara di ruang pertemuan", "url": _u("photo-1540575467063-178a50c2df87")},
     "acara_belajar": {"cat": "acara", "alt": "Peserta belajar bersama", "url": _u("photo-1523580494863-6f3031224c94")},
+    # --- kategori tambahan (ID Unsplash ditulis dari ingatan: VERIFIKASI sebelum dipakai) ---
+    "otomotif_jalan": {"cat": "otomotif", "alt": "Mobil melaju di jalan", "url": _u("photo-1492144534655-ae79c964c9d7")},
+    "otomotif_sport": {"cat": "otomotif", "alt": "Mobil terparkir di bawah cahaya sore", "url": _u("photo-1503376780353-7e6692767b70")},
+    "otomotif_bengkel": {"cat": "otomotif", "alt": "Mekanik memeriksa kendaraan", "url": _u("photo-1486262715619-67b85e0b08d3")},
+    "kecantikan_salon": {"cat": "kecantikan", "alt": "Ruang salon yang rapi", "url": _u("photo-1560066984-138dadb4c035")},
+    "kecantikan_rambut": {"cat": "kecantikan", "alt": "Penataan rambut di salon", "url": _u("photo-1522337360788-8b13dee7a37e")},
+    "fashion_toko": {"cat": "fashion", "alt": "Toko pakaian dengan rak tertata", "url": _u("photo-1441986300917-64674bd600d8")},
+    "fashion_rak": {"cat": "fashion", "alt": "Pakaian tergantung rapi", "url": _u("photo-1445205170230-053b83016050")},
+    "kuliner_meja": {"cat": "kuliner", "alt": "Hidangan di atas meja", "url": _u("photo-1504674900247-0877df9cc836")},
+    "kesehatan_layanan": {"cat": "kesehatan", "alt": "Tenaga kesehatan melayani pasien", "url": _u("photo-1576091160399-112ba8d25d1d")},
+    "pendidikan_kelas": {"cat": "pendidikan", "alt": "Ruang kelas dengan murid belajar", "url": _u("photo-1503676260728-1c00da094a0b")},
+    "pertanian_lahan": {"cat": "pertanian", "alt": "Hamparan lahan pertanian", "url": _u("photo-1500382017468-9049fed747ef")},
+    "konstruksi_proyek": {"cat": "konstruksi", "alt": "Pekerja di lokasi proyek", "url": _u("photo-1504307651254-35680f356dfd")},
 }
 
 # id -> (primary, background, ink, deskripsi untuk model)
