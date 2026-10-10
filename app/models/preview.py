@@ -30,6 +30,7 @@ class Business(BaseModel):
     bio: str | None = None
     hours: list[Hours] = Field(default_factory=list)
     logo: Img | None = None
+    logo_icon: str | None = None  # nama ikon Font Awesome untuk logo sementara
     products: list[Product] = Field(default_factory=list)
 
 # ---- offering (tiga varian) ----
@@ -206,14 +207,15 @@ class Highlight(BaseModel):
     image: Img | None = None
 
 class Post(BaseModel):
-    image: Img
     caption: str
+    image: Img | None = None  # tidak dipakai: feed memakai satu gambar yang dipecah
 
 class InstagramData(BaseModel):
     handle: str
     suggested: bool = False
     highlights: list[Highlight] = Field(default_factory=list, max_length=5)
-    posts: list[Post] = Field(max_length=9)
+    grid_image: Img | None = None  # satu gambar dipecah menjadi 3x3; kosong = kotak warna tema
+    posts: list[Post] = Field(default_factory=list, max_length=9)
 
 class MarketplaceData(BaseModel):
     platform: Literal["shopee", "tokopedia"]
@@ -237,6 +239,10 @@ class MarketplacePresence(_Base):
 
 Presence = Annotated[Union[WebsitePresence, GooglePresence, InstagramPresence, MarketplacePresence], Field(discriminator="type")]
 
+class Extra(BaseModel):
+    type: Literal["whatsapp_business", "tiktok", "facebook", "youtube"]
+    note: str | None = None
+
 # ---- envelope ----
 class Ready(BaseModel):
     status: Literal["ready"] = "ready"
@@ -246,6 +252,7 @@ class Ready(BaseModel):
     site: Site
     recommended_presence: list[Presence] = Field(min_length=1)
     recommendations: list[str] = Field(min_length=2, max_length=4)
+    extras: list[Extra] = Field(default_factory=list, max_length=4)
     completeness: Literal["rich", "basic", "minimal"] | None = None
 
     @model_validator(mode="after")

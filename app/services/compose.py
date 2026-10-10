@@ -13,7 +13,7 @@ from models.preview import (
 )
 
 
-from models.preview import Faq, FaqItem, Feature, Highlights, Process, ProcessStep, Quote, Stat, Stats, Testimonials
+from models.preview import Extra, Faq, FaqItem, Feature, Highlights, Process, ProcessStep, Quote, Stat, Stats, Testimonials
 
 
 # ------------------------------------------------------------------ skema keluaran model
@@ -65,6 +65,10 @@ class DQuote(BaseModel):
 class DFaq(BaseModel):
     q: str
     a: str
+
+class DExtra(BaseModel):
+    type: str
+    note: str | None = None
 
 class DEvent(BaseModel):
     name: str
@@ -147,6 +151,9 @@ class Draft(BaseModel):
     testimonials: list[DQuote] = _l()
     faq: list[DFaq] = _l()
     faq_suggested: bool | None = None
+    instagram_image: str | None = None
+    logo_icon: str | None = None
+    extras: list[DExtra] = _l()
     recommendations: list[str] = _l()
 
 
@@ -171,7 +178,8 @@ KELENGKAPAN CERITA (isi completeness)
 
 KANAL (channels; website selalu ada, jangan masukkan)
 - google_business: hanya bila kota atau tempat disebut.
-- instagram: bila usaha bersifat visual atau pengunjung menyebutnya.
+- instagram: SELALU ada di channels. Pilih SATU id aset untuk instagram_image: foto berkomposisi lega yang paling mewakili usaha
+  (akan dipecah menjadi 9 kotak). posts berisi 9 caption singkat tanpa gambar; highlights tanpa image.
 - marketplace: hanya untuk barang fisik yang wajar dikirim; tandai sellable_online pada produk yang cocok. Bukan untuk jasa.
 - Bila ragu, pilih lebih sedikit. Setiap reason mengacu pada kata-kata atau kebutuhan pengunjung.
 
@@ -193,6 +201,10 @@ BAGIAN SITUS TAMBAHAN (semuanya opsional; lebih baik kosong daripada mengarang)
 - faq (3 sampai 6): pertanyaan umum yang dijawab dari fakta cerita atau dengan "hubungi kami lewat WhatsApp". Jangan menjanjikan
   antar, garansi, atau layanan yang tidak disebut. faq_suggested=true.
 - offering_nav_label: satu kata untuk menu navigasi ("Menu", "Produk", "Layanan", "Paket", "Acara"). offering_intro: satu kalimat pengantar.
+
+- logo_icon: satu ikon dari <ikon> yang mewakili jenis usaha (mug-hot untuk kedai kopi, scissors untuk salon, dan seterusnya).
+- extras: kanal lain yang relevan bagi usaha ini, tipe hanya whatsapp_business, tiktok, facebook, youtube. note: satu kalimat
+  yang mengacu pada cerita. Jangan menyebut dashboard atau fitur yang belum ada.
 
 GAYA
 Bahasa Indonesia sehari-hari, hangat, jelas, kalimat pendek. Tanpa istilah teknis (SEO, optimasi, konversi, AI).
@@ -272,6 +284,7 @@ def assemble(d: Draft, job_id: str, text: str, idx: dict[str, Img]) -> dict:
     business = Business(
         name=name, category=(d.category or "Usaha").strip(), city=city, address=address, phone=phone,
         whatsapp=_wa(phone) or settings.consult_whatsapp, bio=d.bio,
+        logo_icon=d.logo_icon if d.logo_icon in ICONS else "store",
         hours=[Hours(days=h.days, open=h.open) for h in d.hours if _in_text(h.open, text)], products=products,
     )
 
@@ -340,16 +353,18 @@ def assemble(d: Draft, job_id: str, text: str, idx: dict[str, Img]) -> dict:
         c = chans["google_business"]
         pres.append(GooglePresence(priority=prio(), reason=c.reason, copy=_copy(c),
                                    data=GoogleData(photos=imgs(d.google_photos)[:8])))
-    if "instagram" in chans:
-        posts = [Post(image=idx[x.image], caption=x.caption) for x in d.posts[:9] if x.image in idx]
-        if posts:
-            c = chans["instagram"]
-            handle = re.sub(r"[^a-z0-9_.]", "", (d.instagram_handle or name).lower().replace(" ", ""))[:30] or "usahaanda"
-            hl = [Highlight(label=h.label, icon=h.icon if h.icon in ICONS else "circle-info", kind=h.kind,
-                            title=h.title, body=h.body, image=img(h.image))
-                  for h in d.highlights[:5] if h.kind in ("menu", "location", "contact", "text")]
-            pres.append(InstagramPresence(priority=prio(), reason=c.reason, copy=_copy(c), data=InstagramData(
-                handle=handle, suggested=bool(d.instagram_suggested), highlights=hl, posts=posts)))
+    # Instagram selalu ada. Satu gambar dipecah 9 kotak; tanpa gambar, frontend memakai kotak warna tema.
+    ig = chans.get("instagram")
+    grid = img(d.instagram_image) or img(d.hero_image) or (imgs(d.google_photos) or imgs(d.proof_photos) or [None])[0]
+    handle = re.sub(r"[^a-z0-9_.]", "", (d.instagram_handle or name).lower().replace(" ", ""))[:30] or "usahaanda"
+    hl = [Highlight(label=h.label, icon=h.icon if h.icon in ICONS else "circle-info", kind=h.kind, title=h.title, body=h.body)
+          for h in d.highlights[:5] if h.kind in ("menu", "location", "contact", "text")]
+    caps = [Post(caption=x.caption.strip()[:140]) for x in d.posts[:9] if x.caption and x.caption.strip()]
+    pres.append(InstagramPresence(
+        priority=prio(), copy=_copy(ig) if ig else None,
+        reason=ig.reason if ig else f"Instagram membantu {name} tampil konsisten dan mudah dikenali.",
+        data=InstagramData(handle=handle, suggested=bool(d.instagram_suggested) or not ig or not caps,
+                           highlights=hl, grid_image=grid, posts=caps)))
     if "marketplace" in chans:
         ids = [f"p{i}" for i, pr in enumerate(d.products[:12], 1) if pr.sellable_online]
         if ids:
@@ -357,11 +372,15 @@ def assemble(d: Draft, job_id: str, text: str, idx: dict[str, Img]) -> dict:
             pres.append(MarketplacePresence(priority=prio(), reason=c.reason, copy=_copy(c),
                                             data=MarketplaceData(platform="shopee", store_name=name, product_ids=ids)))
 
+    allowed = ("whatsapp_business", "tiktok", "facebook", "youtube")
+    notes = {x.type: (x.note or "").strip()[:140] or None for x in d.extras if x.type in allowed}
+    extras = [Extra(type=t, note=notes.get(t)) for t in dict.fromkeys(["whatsapp_business", *notes])][:4]
+
     recs = [r for r in d.recommendations if r][:4] or [x.reason for x in pres][:4]
     if len(recs) < 2:
         recs.append("WhatsApp menjadi jalur utama untuk bertanya atau memesan.")
 
-    ready = Ready(job_id=job_id, consult_whatsapp=settings.consult_whatsapp, business=business, site=site,
+    ready = Ready(job_id=job_id, consult_whatsapp=settings.consult_whatsapp, business=business, site=site, extras=extras,
                   recommended_presence=pres, recommendations=recs,
                   completeness=d.completeness if d.completeness in ("rich", "basic", "minimal") else "basic")
     return ready.model_dump(mode="json", by_alias=True, exclude_none=True)
