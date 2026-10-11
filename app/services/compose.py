@@ -13,7 +13,7 @@ from models.preview import (
 )
 
 
-from models.preview import Extra, Faq, FaqItem, Feature, Highlights, Process, ProcessStep, Quote, Stat, Stats, Testimonials
+from models.preview import Extra, Rating, Faq, FaqItem, Feature, Highlights, Process, ProcessStep, Quote, Stat, Stats, Testimonials
 
 
 # ------------------------------------------------------------------ skema keluaran model
@@ -178,7 +178,7 @@ KELENGKAPAN CERITA (isi completeness)
 - Usaha ilegal, penipuan, atau konten dewasa: declined=true.
 
 KANAL (channels; website selalu ada, jangan masukkan)
-- google_business: hanya bila kota atau tempat disebut.
+- google_business: SELALU ada di channels. Rating dan ulasan penting bagi pelanggan, juga bagi usaha tanpa alamat tetap.
 - instagram: SELALU ada di channels. Pilih SATU id aset untuk instagram_image: foto berkomposisi lega yang paling mewakili usaha
   (akan dipecah menjadi 9 kotak). posts berisi 9 caption singkat tanpa gambar; highlights tanpa image.
 - marketplace: hanya untuk barang fisik yang wajar dikirim; tandai sellable_online pada produk yang cocok. Bukan untuk jasa.
@@ -356,10 +356,12 @@ def assemble(d: Draft, job_id: str, text: str, idx: dict[str, Img]) -> dict:
     def prio() -> str:
         return "high" if len(pres) == 1 else "supporting"
 
-    if "google_business" in chans and (business.city or business.address):
-        c = chans["google_business"]
-        pres.append(GooglePresence(priority=prio(), reason=c.reason, copy=_copy(c),
-                                   data=GoogleData(photos=imgs(d.google_photos)[:8])))
+    # Profil Google selalu ada (rating dan ulasan penting, juga bagi usaha tanpa alamat tetap). Rating hanya contoh dan berlabel.
+    gb = chans.get("google_business")
+    pres.append(GooglePresence(
+        priority=prio(), copy=_copy(gb) if gb else None,
+        reason=gb.reason if gb else f"Profil Google membuat {name} mudah ditemukan dan dinilai pelanggan.",
+        data=GoogleData(photos=(imgs(d.google_photos) or imgs(d.proof_photos))[:8], rating=Rating(value=4.8, sample=True))))
     # Instagram selalu ada. Satu gambar dipecah 9 kotak; tanpa gambar, frontend memakai kotak warna tema.
     ig = chans.get("instagram")
     grid = img(d.instagram_image) or img(d.hero_image) or (imgs(d.google_photos) or imgs(d.proof_photos) or [None])[0]
