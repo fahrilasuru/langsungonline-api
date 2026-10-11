@@ -5,10 +5,11 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import TypeAdapter
 
 from config import settings
+from limiter import limiter
 from models.preview import PreviewResponse
 from services.compose import compose, resolve_files
 from services.gemini import normalize_input
-from services.storage import download_file, signed_url, upload_file
+from services.storage import MAX_TOTAL_SIZE, download_file, signed_url, upload_file
 from services.supabase import supabase
 
 router = APIRouter()
@@ -19,6 +20,7 @@ _adapter = TypeAdapter(PreviewResponse)
 
 
 @router.post("/preview")
+@limiter.limit("3/minute;15/hour")
 async def prepare(
     request: Request,
     background: BackgroundTasks,
@@ -42,8 +44,9 @@ async def prepare(
     }).execute()
 
     try:
+        remaining = MAX_TOTAL_SIZE
         for file in files:
-            await upload_file(preview_id, file)
+            remaining -= await upload_file(preview_id, file, remaining)
 
         update_status(preview_id, "pending")
 

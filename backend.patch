@@ -1,0 +1,358 @@
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' a/.gitignore b/.gitignore
+--- a/.gitignore	2026-10-11 11:41:06.006773760 +0000
++++ b/.gitignore	2026-10-11 11:41:50.701858468 +0000
+@@ -1,3 +1,4 @@
+ .env
+ .venv/
+-app/__pycache__/
+\ No newline at end of file
++__pycache__/
++*.pyc
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' a/app/config.py b/app/config.py
+--- a/app/config.py	2026-10-11 11:41:06.007733287 +0000
++++ b/app/config.py	2026-10-11 11:41:45.237855437 +0000
+@@ -8,6 +8,11 @@
+     # Alamat frontend (tujuan redirect setelah upload) dan nomor WhatsApp tim Langsung Online.
+     frontend_url: str = "https://langsung.online"
+     consult_whatsapp: str  # format 62812..., tanpa + atau spasi
++    # true bila API berjalan di balik reverse proxy tepercaya (dipakai untuk IP asli pada rate limit).
++    behind_proxy: bool = False
++    # Origin tambahan (dipisah koma), mis. domain staging. localhost hanya ditambahkan saat debug.
++    extra_origins: str = ""
++    debug: bool = False
+ 
+     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' a/app/limiter.py b/app/limiter.py
+--- a/app/limiter.py	1970-01-01 00:00:00.000000000 +0000
++++ b/app/limiter.py	2026-10-11 11:41:45.125751780 +0000
+@@ -0,0 +1,21 @@
++from fastapi import Request
++from slowapi import Limiter
++
++from config import settings
++
++
++def client_ip(request: Request) -> str:
++    """IP klien untuk rate limit.
++
++    Di balik reverse proxy (Railway, Render, Fly, Nginx, dll.) request.client.host adalah IP proxy,
++    sehingga semua pengunjung dianggap satu orang. Aktifkan BEHIND_PROXY=true bila itu kasusnya;
++    entri TERAKHIR X-Forwarded-For adalah yang ditambahkan proxy tepercaya (entri awal bisa dipalsukan klien).
++    """
++    if settings.behind_proxy:
++        fwd = request.headers.get("x-forwarded-for", "")
++        if fwd:
++            return fwd.split(",")[-1].strip()
++    return request.client.host if request.client else "unknown"
++
++
++limiter = Limiter(key_func=client_ip)
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' a/app/main.py b/app/main.py
+--- a/app/main.py	2026-10-11 11:41:06.007780673 +0000
++++ b/app/main.py	2026-10-11 11:41:45.241858143 +0000
+@@ -1,25 +1,53 @@
+-from fastapi import FastAPI
++from fastapi import FastAPI, Request
+ from fastapi.middleware.cors import CORSMiddleware
++from fastapi.responses import JSONResponse
++from slowapi import _rate_limit_exceeded_handler
++from slowapi.errors import RateLimitExceeded
++
+ from config import settings
++from limiter import limiter
+ from routes.contact import router as contact_router
+ from routes.preview import router as preview_router
+ 
+-app = FastAPI()
++# Dokumentasi interaktif hanya saat debug.
++docs = {} if settings.debug else {"docs_url": None, "redoc_url": None, "openapi_url": None}
++app = FastAPI(**docs)
++
++app.state.limiter = limiter
++app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+ 
+ origins = {
+     "https://langsung.online",
+     "https://coba.langsung.online",
+-    "http://localhost:4321",
+-    "http://127.0.0.1:4321",
+     settings.frontend_url.rstrip("/"),
++    *(o.strip().rstrip("/") for o in settings.extra_origins.split(",") if o.strip()),
+ }
++if settings.debug:
++    origins |= {"http://localhost:4321", "http://127.0.0.1:4321"}
++
+ # Tidak memakai cookie, jadi allow_credentials tidak diperlukan.
+ app.add_middleware(
+     CORSMiddleware,
+     allow_origins=sorted(origins),
+     allow_methods=["GET", "POST"],
+-    allow_headers=["*"],
++    allow_headers=["Content-Type", "Accept"],
+ )
+ 
++# Batas kasar ukuran request (6 berkas x 20 MB + overhead). Tetap pasang batas di reverse proxy,
++# karena request chunked tanpa Content-Length tidak tertangkap di sini.
++MAX_BODY = 55 * 1024 * 1024
++
++
++@app.middleware("http")
++async def guard(request: Request, call_next):
++    length = request.headers.get("content-length")
++    if length and length.isdigit() and int(length) > MAX_BODY:
++        return JSONResponse({"detail": "Permintaan terlalu besar"}, status_code=413)
++    response = await call_next(request)
++    response.headers["X-Content-Type-Options"] = "nosniff"
++    response.headers["Referrer-Policy"] = "no-referrer"
++    return response
++
++
+ app.include_router(preview_router)
+ app.include_router(contact_router)
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' a/app/requirements.txt b/app/requirements.txt
+--- a/app/requirements.txt	2026-10-11 11:41:06.008536966 +0000
++++ b/app/requirements.txt	2026-10-11 11:41:45.238243922 +0000
+@@ -5,3 +5,4 @@
+ pydantic-settings
+ supabase
+ google-genai
++slowapi
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' a/app/routes/contact.py b/app/routes/contact.py
+--- a/app/routes/contact.py	2026-10-11 11:41:06.009167673 +0000
++++ b/app/routes/contact.py	2026-10-11 11:41:45.246438291 +0000
+@@ -1,53 +1,56 @@
+-from fastapi import APIRouter, HTTPException
+-from pydantic import BaseModel
+-from services.supabase import supabase
+-
+-router = APIRouter()
+-
+-class ContactRequest(BaseModel):
+-    business_name: str
+-    business_field: str
+-    city: str
+-    social_ref: str | None = None
+-    goal: str
+-    whatsapp: str
+-
+-@router.post("/contact")
+-async def submit(data: ContactRequest):
+-    if (
+-        not data.business_name.strip()
+-        or not data.business_field.strip()
+-        or not data.city.strip()
+-        or not data.goal.strip()
+-        or not data.whatsapp.strip()
+-    ):
+-        raise HTTPException(
+-            status_code=400,
+-            detail="Data wajib belum lengkap",
+-        )
+-
+-    try:
+-        supabase.table("pesan_langsung").insert({
+-            "business_name": data.business_name.strip(),
+-            "business_field": data.business_field.strip(),
+-            "city": data.city.strip(),
+-            "social_ref": data.social_ref.strip() if data.social_ref else None,
+-            "goal": data.goal.strip(),
+-            "whatsapp": data.whatsapp.strip(),
+-        }).execute()
+-
+-    except Exception as exc:
+-        print(
+-            "CONTACT ERROR:",
+-            type(exc).__name__,
+-            str(exc),
+-        )
+-
+-        raise HTTPException(
+-            status_code=500,
+-            detail="Gagal mengirim data",
+-        )
+-
+-    return {
+-        "ok": True,
+-    }
+\ No newline at end of file
++import logging
++import re
++
++from fastapi import APIRouter, HTTPException, Request
++from pydantic import BaseModel, Field
++
++from limiter import limiter
++from services.supabase import supabase
++
++router = APIRouter()
++log = logging.getLogger("contact")
++
++# 8-15 digit, boleh diawali + dan dipisah spasi atau tanda hubung.
++_PHONE = re.compile(r"^\+?\d[\d\s\-]{6,18}\d$")
++
++
++class ContactRequest(BaseModel):
++    business_name: str = Field(max_length=120)
++    business_field: str = Field(max_length=120)
++    city: str = Field(max_length=80)
++    social_ref: str | None = Field(None, max_length=200)
++    goal: str = Field(max_length=200)
++    whatsapp: str = Field(max_length=25)
++    # Honeypot: kolom tersembunyi di formulir. Manusia tidak mengisinya, bot biasanya mengisi.
++    website: str | None = Field(None, max_length=200)
++
++
++@router.post("/contact")
++@limiter.limit("5/minute;20/hour")
++async def submit(request: Request, data: ContactRequest):
++    if data.website:  # bot: pura-pura berhasil agar tidak tahu kenapa ditolak
++        return {"ok": True}
++
++    if not all(
++        v.strip()
++        for v in (data.business_name, data.business_field, data.city, data.goal, data.whatsapp)
++    ):
++        raise HTTPException(status_code=400, detail="Data wajib belum lengkap")
++
++    if not _PHONE.match(data.whatsapp.strip()):
++        raise HTTPException(status_code=400, detail="Nomor WhatsApp tidak valid")
++
++    try:
++        supabase.table("pesan_langsung").insert({
++            "business_name": data.business_name.strip(),
++            "business_field": data.business_field.strip(),
++            "city": data.city.strip(),
++            "social_ref": data.social_ref.strip() if data.social_ref else None,
++            "goal": data.goal.strip(),
++            "whatsapp": data.whatsapp.strip(),
++        }).execute()
++    except Exception:
++        log.exception("Gagal menyimpan pesan kontak")
++        raise HTTPException(status_code=500, detail="Gagal mengirim data")
++
++    return {"ok": True}
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' a/app/routes/preview.py b/app/routes/preview.py
+--- a/app/routes/preview.py	2026-10-11 11:41:06.009215277 +0000
++++ b/app/routes/preview.py	2026-10-11 11:41:45.259401073 +0000
+@@ -5,10 +5,11 @@
+ from pydantic import TypeAdapter
+ 
+ from config import settings
++from limiter import limiter
+ from models.preview import PreviewResponse
+ from services.compose import compose, resolve_files
+ from services.gemini import normalize_input
+-from services.storage import download_file, signed_url, upload_file
++from services.storage import MAX_TOTAL_SIZE, download_file, signed_url, upload_file
+ from services.supabase import supabase
+ 
+ router = APIRouter()
+@@ -19,6 +20,7 @@
+ 
+ 
+ @router.post("/preview")
++@limiter.limit("3/minute;15/hour")
+ async def prepare(
+     request: Request,
+     background: BackgroundTasks,
+@@ -42,8 +44,9 @@
+     }).execute()
+ 
+     try:
++        remaining = MAX_TOTAL_SIZE
+         for file in files:
+-            await upload_file(preview_id, file)
++            remaining -= await upload_file(preview_id, file, remaining)
+ 
+         update_status(preview_id, "pending")
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' a/app/services/storage.py b/app/services/storage.py
+--- a/app/services/storage.py	2026-10-11 11:41:06.010866997 +0000
++++ b/app/services/storage.py	2026-10-11 11:41:45.248206500 +0000
+@@ -4,38 +4,60 @@
+ 
+ BUCKET = "preview-files"
+ MAX_FILE_SIZE = 20 * 1024 * 1024
++MAX_TOTAL_SIZE = 50 * 1024 * 1024  # jumlah semua berkas dalam satu permintaan
+ ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
++EXTENSION = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "application/pdf": ".pdf"}
+ SIGNED_URL_TTL = 60 * 60 * 24  # 24 jam; dibuat ulang setiap preview dibuka
+ 
+-async def upload_file(preview_id: str, file: UploadFile):
++
++def sniff_mime(content: bytes) -> str | None:
++    """Tipe berkas dari isinya (magic bytes), bukan dari header yang dikirim klien."""
++    if content.startswith(b"\xff\xd8\xff"):
++        return "image/jpeg"
++    if content.startswith(b"\x89PNG\r\n\x1a\n"):
++        return "image/png"
++    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
++        return "image/webp"
++    if b"%PDF-" in content[:1024]:
++        return "application/pdf"
++    return None
++
++
++async def upload_file(preview_id: str, file: UploadFile, remaining: int = MAX_TOTAL_SIZE) -> int:
++    """Unggah satu berkas dan kembalikan ukurannya (byte), agar pemanggil bisa menghitung total."""
++    # Gerbang murah sebelum membaca isi; pemeriksaan sebenarnya memakai magic bytes di bawah.
+     if (file.content_type or "") not in ALLOWED_MIME:
+         raise HTTPException(status_code=415, detail="Hanya gambar (JPG, PNG, WebP) atau PDF")
+ 
+-    file_id = str(uuid4())
+-    content = await file.read(MAX_FILE_SIZE + 1)
++    limit = min(MAX_FILE_SIZE, remaining)
++    content = await file.read(limit + 1)
+ 
+-    if len(content) > MAX_FILE_SIZE:
++    if len(content) > limit:
++        if limit < MAX_FILE_SIZE:
++            raise HTTPException(status_code=413, detail="Total ukuran berkas tidak boleh lebih dari 50MB")
+         raise HTTPException(status_code=413, detail="File tidak boleh lebih dari 20MB")
+ 
+-    extension = ""
+-    if "." in file.filename:
+-        extension = "." + file.filename.rsplit(".", 1)[1].lower()
++    mime = sniff_mime(content)
++    if mime not in ALLOWED_MIME:
++        raise HTTPException(status_code=415, detail="Isi berkas bukan gambar (JPG, PNG, WebP) atau PDF yang valid")
+ 
+-    storage_path = f"{preview_id}/{file_id}{extension}"
++    file_id = str(uuid4())
++    # Ekstensi dari tipe yang terdeteksi, bukan dari nama berkas buatan pengguna.
++    storage_path = f"{preview_id}/{file_id}{EXTENSION[mime]}"
+ 
+     supabase.storage.from_(BUCKET).upload(
+         path=storage_path,
+         file=content,
+-        file_options={"content-type": file.content_type or "application/octet-stream"},
++        file_options={"content-type": mime},
+     )
+ 
+     try:
+         supabase.table("preview_files").insert({
+             "id": file_id,
+             "preview_id": preview_id,
+-            "filename": file.filename,
++            "filename": (file.filename or "")[:200],
+             "storage_path": storage_path,
+-            "mime_type": file.content_type,
++            "mime_type": mime,
+             "size": len(content),
+         }).execute()
+ 
+@@ -47,9 +69,13 @@
+ 
+         raise
+ 
++    return len(content)
++
++
+ def download_file(storage_path: str) -> bytes:
+     return supabase.storage.from_(BUCKET).download(storage_path)
+ 
++
+ def signed_url(storage_path: str) -> str:
+     res = supabase.storage.from_(BUCKET).create_signed_url(storage_path, SIGNED_URL_TTL)
+     return res.get("signedURL") or res.get("signedUrl") or ""

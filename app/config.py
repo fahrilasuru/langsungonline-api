@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     # Alamat frontend (tujuan redirect setelah upload) dan nomor WhatsApp tim Langsung Online.
     frontend_url: str = "https://langsung.online"
     consult_whatsapp: str  # format 62812..., tanpa + atau spasi
+    # true bila API berjalan di balik reverse proxy tepercaya (dipakai untuk IP asli pada rate limit).
+    behind_proxy: bool = False
+    # Origin tambahan (dipisah koma), mis. domain staging. localhost hanya ditambahkan saat debug.
+    extra_origins: str = ""
+    debug: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
