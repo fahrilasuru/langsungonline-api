@@ -2,3 +2,6 @@
 .venv/
 __pycache__/
 *.pyc
+
+# dihasilkan oleh app/export_openapi.py
+openapi.json

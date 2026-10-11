@@ -10,10 +10,8 @@ from models.preview import (
     Business, Catalog, Event, Events, CopyText, Cta, GoogleData, GooglePresence, Hero, Highlight, Hours, Img, InstagramData,
     InstagramPresence, MarketplaceData, MarketplacePresence, Packages, Positioning, Post, Product, Proof, Ready,
     Service, Services, Site, Theme, Tier, WebsitePresence,
+    Extra, Rating, Faq, FaqItem, Feature, Highlights, Process, ProcessStep, Quote, Stat, Stats, Testimonials,
 )
-
-
-from models.preview import Extra, Rating, Faq, FaqItem, Feature, Highlights, Process, ProcessStep, Quote, Stat, Stats, Testimonials
 
 
 # ------------------------------------------------------------------ skema keluaran model

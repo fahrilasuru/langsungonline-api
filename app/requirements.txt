@@ -1,8 +1,8 @@
-fastapi
-uvicorn[standard]
-python-multipart
-pydantic>=2
-pydantic-settings
-supabase
-google-genai
-slowapi
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pydantic>=2.7
+pydantic-settings>=2.2
+supabase>=2.5
+google-genai>=1.0
+slowapi>=0.1.9
