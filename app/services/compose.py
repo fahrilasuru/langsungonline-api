@@ -398,8 +398,8 @@ def assemble(d: Draft, job_id: str, text: str, idx: dict[str, Img]) -> dict:
 # ------------------------------------------------------------------ pemanggilan Gemini
 async def compose(job_id: str, text: str, normalized: NormalizedInput, images: list[dict]) -> dict:
     """images: [{id: 'file_1', file_id, content, mime_type}]. Mengembalikan dict respons akhir (siap disimpan)."""
-    from google import genai
     from google.genai import types
+    from services.gemini import client
 
     idx = {k: Img(url=v["url"], alt=v["alt"]) for k, v in LIBRARY.items()}
     for im in images:
@@ -407,8 +407,10 @@ async def compose(job_id: str, text: str, normalized: NormalizedInput, images: l
 
     aset = [f"{k} | {v['cat']} | {v['alt']}" for k, v in LIBRARY.items()] + [f"{im['id']} | foto pengunjung | unggahan" for im in images]
     palet = [f"{k} | {v[5]}" for k, v in PALETTES.items()]
-    clean = text.replace("<", "(").replace(">", ")")
-    prompt = (f"<cerita>{clean}</cerita>\n<ringkasan_awal>{normalized.model_dump_json(exclude_none=True)}</ringkasan_awal>\n"
+    _tag = lambda x: x.replace("<", "(").replace(">", ")")  # cegah penutupan tag buatan pengguna/model
+    clean = _tag(text)
+    summary = _tag(normalized.model_dump_json(exclude_none=True))
+    prompt = (f"<cerita>{clean}</cerita>\n<ringkasan_awal>{summary}</ringkasan_awal>\n"
               f"<aset>\n" + "\n".join(aset) + "\n</aset>\n<palet>\n" + "\n".join(palet) + "\n</palet>\n"
               f"<topik>{', '.join(sorted({v['cat'] for v in LIBRARY.values()}))}</topik>\n"
               f"<ikon>{', '.join(sorted(ICONS))}</ikon>")
@@ -416,7 +418,6 @@ async def compose(job_id: str, text: str, normalized: NormalizedInput, images: l
     for im in images:
         contents += [f"[{im['id']}]", types.Part.from_bytes(data=im["content"], mime_type=im["mime_type"])]
 
-    client = genai.Client(api_key=settings.gemini_key)
     cfg = types.GenerateContentConfig(system_instruction=SYSTEM, response_mime_type="application/json",
                                       response_schema=Draft, temperature=0.4)
     last: Exception | None = None
@@ -440,3 +441,18 @@ def resolve_files(obj, urls: dict[str, str]):
     if isinstance(obj, dict):
         return {k: resolve_files(v, urls) for k, v in obj.items()}
     return obj
+
+
+def file_ids(obj, out: set[str] | None = None) -> set[str]:
+    """Kumpulkan id berkas yang dirujuk 'file:<id>' agar URL bertanda tangan hanya dibuat untuk yang dipakai."""
+    out = set() if out is None else out
+    if isinstance(obj, str):
+        if obj.startswith("file:"):
+            out.add(obj[5:])
+    elif isinstance(obj, list):
+        for x in obj:
+            file_ids(x, out)
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            file_ids(v, out)
+    return out

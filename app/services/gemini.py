@@ -4,7 +4,8 @@ from config import settings
 from models.normalized import NormalizedInput
 
 client = genai.Client(
-    api_key=settings.gemini_key
+    api_key=settings.gemini_key,
+    http_options=types.HttpOptions(timeout=90_000),  # ms; tanpa ini panggilan bisa menggantung
 )
 
 SYSTEM_PROMPT = """

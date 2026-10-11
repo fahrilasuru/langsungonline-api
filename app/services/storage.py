@@ -1,7 +1,10 @@
+import logging
 from uuid import uuid4
 from fastapi import HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 from services.supabase import supabase
 
+log = logging.getLogger("storage")
 BUCKET = "preview-files"
 MAX_FILE_SIZE = 20 * 1024 * 1024
 MAX_TOTAL_SIZE = 50 * 1024 * 1024  # jumlah semua berkas dalam satu permintaan
@@ -21,6 +24,33 @@ def sniff_mime(content: bytes) -> str | None:
     if b"%PDF-" in content[:1024]:
         return "application/pdf"
     return None
+
+
+def _save(preview_id: str, file_id: str, storage_path: str, content: bytes, mime: str, filename: str) -> None:
+    """Bagian blocking (storage + DB); dijalankan di threadpool agar event loop tidak tertahan."""
+    supabase.storage.from_(BUCKET).upload(
+        path=storage_path,
+        file=content,
+        file_options={"content-type": mime},
+    )
+
+    try:
+        supabase.table("preview_files").insert({
+            "id": file_id,
+            "preview_id": preview_id,
+            "filename": filename[:200],
+            "storage_path": storage_path,
+            "mime_type": mime,
+            "size": len(content),
+        }).execute()
+
+    except Exception:
+        try:
+            supabase.storage.from_(BUCKET).remove([storage_path])
+        except Exception:
+            log.warning("Gagal membersihkan %s", storage_path)
+
+        raise
 
 
 async def upload_file(preview_id: str, file: UploadFile, remaining: int = MAX_TOTAL_SIZE) -> int:
@@ -45,29 +75,7 @@ async def upload_file(preview_id: str, file: UploadFile, remaining: int = MAX_TO
     # Ekstensi dari tipe yang terdeteksi, bukan dari nama berkas buatan pengguna.
     storage_path = f"{preview_id}/{file_id}{EXTENSION[mime]}"
 
-    supabase.storage.from_(BUCKET).upload(
-        path=storage_path,
-        file=content,
-        file_options={"content-type": mime},
-    )
-
-    try:
-        supabase.table("preview_files").insert({
-            "id": file_id,
-            "preview_id": preview_id,
-            "filename": (file.filename or "")[:200],
-            "storage_path": storage_path,
-            "mime_type": mime,
-            "size": len(content),
-        }).execute()
-
-    except Exception:
-        try:
-            supabase.storage.from_(BUCKET).remove([storage_path])
-        except Exception:
-            print(f"Gagal membersihkan {storage_path}")
-
-        raise
+    await run_in_threadpool(_save, preview_id, file_id, storage_path, content, mime, file.filename or "")
 
     return len(content)
 

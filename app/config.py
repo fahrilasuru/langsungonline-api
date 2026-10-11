@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     # Origin tambahan (dipisah koma), mis. domain staging. localhost hanya ditambahkan saat debug.
     extra_origins: str = ""
     debug: bool = False
+    # Token untuk pemicu ulang manual /preview/{id}/process. Kosong = endpoint dinonaktifkan.
+    admin_token: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
